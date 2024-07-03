@@ -41,6 +41,7 @@ def get_default_parser():
 def load_datasets(args):
     pl.seed_everything(args.seed)
     print('Loading datasets...')
+    print(args.data_dir)
     if 'voronoi' in args.data_dir:
         data_name = 'voronoi' + args.data_dir.split('voronoi')[-1].replace('/','')
         DataClass = VoronoiDataset
@@ -148,10 +149,13 @@ def train_model(model_class, train_loader, val_loader,
                 data_dir=None,
                 compile=False,
                 **kwargs):
+    #Environment setting.
     torch.set_float32_matmul_precision('medium')
     trainer_args = {}
     if root_dir is None or root_dir == '':
         root_dir = os.path.join('checkpoints/', model_class.__name__)
+
+    #Logging
     if not (logger_name is None or logger_name == ''):
         logger_name = logger_name.split('/')
         logger = pl.loggers.TensorBoardLogger(root_dir, 
@@ -161,6 +165,7 @@ def train_model(model_class, train_loader, val_loader,
     if progress_bar_refresh_rate == 0:
         trainer_args['enable_progress_bar'] = False
 
+    #use callback in lightning to save model
     if callback_kwargs is None:
         callback_kwargs = dict()
     callbacks = model_class.get_callbacks(exmp_inputs=next(iter(val_loader)), cluster=cluster, 

@@ -54,7 +54,7 @@ class BISCUITNF(BISCUITVAE):
                                            self.hparams.num_flows,
                                            act_fn=get_act_fn(self.hparams.flow_act_fn),
                                            hidden_per_var=self.hparams.hidden_per_var)
-        # Setup autoencoder
+        # Setup autoencoder from pretrained ae
         if self.hparams.autoencoder_checkpoint is not None:
             self.autoencoder = Autoencoder.load_from_checkpoint(self.hparams.autoencoder_checkpoint)
             for p in self.autoencoder.parameters():
@@ -67,7 +67,7 @@ class BISCUITNF(BISCUITVAE):
             self.hparams.noise_level = 0.0
 
     def encode(self, x, random=True):
-        # Map input to disentangled latents, e.g. for correlation metrics
+        # Map input to disentangled latents (as defined the output of vae), e.g. for correlation metrics
         if random:
             x = x + torch.randn_like(x) * self.hparams.noise_level
         z, _ = self.flow(x)
@@ -91,6 +91,7 @@ class BISCUITNF(BISCUITVAE):
         z_sample = z_sample.unflatten(0, (batch_size, seq_len, num_samples))
         ldj = ldj.reshape(batch_size, seq_len, num_samples)
         # Calculate the negative log likelihood of the transition prior
+        # z_sample is in the causal space.
         nll = self.prior_t1.sample_based_nll(z_t=z_sample[:,:-1].flatten(0, 1),
                                              z_t1=z_sample[:,1:].flatten(0, 1),
                                              action=action.flatten(0, 1))

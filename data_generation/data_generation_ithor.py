@@ -324,6 +324,7 @@ def get_action_pos(event : dict, objectId : str, action_type : str, randomize : 
     return action_pos
 
 
+#Executes a specified action on a target object within an AI2-THOR simulation environment and updates the environment state.
 def perform_action(controller : Controller, action_type : str, object_name : str, event : dict, step_number : int = -1):
     print((f"[{step_number:3d}] " if step_number >= 0 else "") + f"Performing action {action_type} on {object_name}")
     objectId, obj = get_object_id(event, object_name)
@@ -433,7 +434,7 @@ def perform_action(controller : Controller, action_type : str, object_name : str
             event = controller.step(action='Stand')
     return event, action_pos
 
-
+#List all possible actions of every object for current state. Randomly perform one action at a time.
 def perform_random_action(controller : Controller, last_step : dict):
     possible_actions = deepcopy(ACTIONS)
     microwave = get_object_id(last_step['event'], 'Microwave')[1]
@@ -599,6 +600,7 @@ def generate_sequence(seed : int, output_folder : str, num_frames : int = 200, p
     print('-> Seed:', seed)
     attempts = 0
     success = False
+    # controller, event = initialize_environment(seed)
     while not success and attempts < 10:
         try:
             controller, event = initialize_environment(seed)
@@ -620,7 +622,9 @@ def generate_sequence(seed : int, output_folder : str, num_frames : int = 200, p
         for key, val in get_object_segmentations(event).items():
             collected_segmentations[key] = np.zeros((num_frames, *val.shape), dtype=val.dtype)
             collected_segmentations[key][0] = val
+    #Generate frames
     for i in range(1,num_frames):
+        #update the current scene
         last_step = perform_random_action(controller, last_step)
         collected_frames[i] = last_step['event'].frame
         collected_actions[i] = last_step['action_pos']
@@ -636,7 +640,10 @@ def generate_sequence(seed : int, output_folder : str, num_frames : int = 200, p
     collected_frames = downscale_images(collected_frames)
     causal_keys = sorted(list(collected_states.keys()))
     latents = np.stack([collected_states[key] for key in causal_keys], axis=1)
+    #latents are the values of causal variables.
     latents, causal_keys = simplify_latents(latents, causal_keys)
+    #What is targets used for?
+    #Changes in causal variables with the interaction.
     targets = create_targets(debug_info, causal_keys)
     np.savez_compressed(os.path.join(output_folder, f'{prefix}seq_{str(seed).zfill(6)}.npz'), 
                         frames=collected_frames.transpose(0, 3, 1, 2), 
@@ -688,7 +695,8 @@ if __name__ == '__main__':
         if os.path.exists(out_file) and not overwrite:
             continue
         print('#' * 50 + '\n' + f'Generating sequence {seq_idx} of {num_sequences}...' + '\n' + '#' * 50)
-        collected_frames, collected_actions, collected_states = generate_sequence(seed=offset_seed + seq_idx, 
+        # print(f"offset_seed:{offset_seed.dtype}, seq seed: {seq_idx}")
+        collected_frames, collected_actions, collected_states = generate_sequence(seed=int(offset_seed + seq_idx), 
                                                                                   output_folder=output_folder, 
                                                                                   num_frames=num_frames,
                                                                                   save_segmentations=save_segmentations,

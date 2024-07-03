@@ -11,7 +11,7 @@ sys.path.append('../')
 from models.biscuit_nf import BISCUITNF
 from experiments.utils import train_model, load_datasets, get_default_parser, print_params
 
-
+# Encode the dataset.
 def encode_dataset(model, datasets):
     if isinstance(datasets, data.Dataset):
         datasets = [datasets]
@@ -30,6 +30,7 @@ def encode_dataset(model, datasets):
         encoding_folder = os.path.join(autoencoder_folder, 'encodings/')
         os.makedirs(encoding_folder, exist_ok=True)
         encoding_filename = os.path.join(encoding_folder, f'{model.hparams.data_folder}_{dataset.split_name}.pt')
+        # Write the encoding file. The encodings are defined as the output of the encoder, which is the latent variables.
         if not os.path.exists(encoding_filename):
             encodings = dataset.encode_dataset(lambda batch: model.autoencoder.encoder(batch.to(model.device)).cpu())
             torch.save(encodings, encoding_filename)
@@ -90,6 +91,7 @@ if __name__ == '__main__':
                 progress_bar_refresh_rate=0 if args.cluster else 1,
                 callback_kwargs=callback_kwargs,
                 var_names=datasets['train'].target_names(),
+                # It is only used for NF model. The output of the encoder of the whole dataset would be written into a file.
                 op_before_running=lambda model: encode_dataset(model, list(datasets.values())),
                 save_last_model=True,
                 cluster_logging=args.cluster,

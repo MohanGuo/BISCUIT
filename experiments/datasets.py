@@ -735,7 +735,9 @@ class iTHORDataset(data.Dataset):
         for idx in tqdm_track(range(0, self.imgs.shape[0], batch_size), desc='Encoding dataset...', leave=False, cluster=self.cluster):
             batch = self.imgs[idx:idx+batch_size]
             batch = self._prepare_imgs(batch)
+            # Why bs=5 is triplets?
             if len(batch.shape) == 5:  # Triplets
+                # Combine the 0 and 1 dimension
                 batch = batch.flatten(0, 1)
             with torch.no_grad():
                 batch = encode_func(batch)
@@ -791,6 +793,32 @@ class iTHORDataset(data.Dataset):
         return self.indices.shape[0]
 
     def __getitem__(self, idx):
+        """
+    Retrieve an item from the dataset at the specified index. Depending on the dataset's configuration,
+    this method prepares and returns different components such as image data, robot states, targets,
+    and latent variables.
+
+    Parameters:
+    - idx (int): The index of the item to retrieve.
+
+    Returns:
+    - tuple or ndarray: Depending on the configuration, this function returns a tuple containing
+      some or all of the following:
+        - img_pair (ndarray): The image or sequence of images corresponding to the index. These
+          images are pre-processed according to the dataset specifications and are ready to be
+          used as input to machine learning models.
+        - rob (ndarray): The robot state information, if `return_robot_state` is set to True. This
+          data includes details about the robot's actions and interacted object that
+          involve interaction within the environment.
+        - target (ndarray): Target data that represents the expected outcomes or states the model
+          is supposed to predict. This is essential for supervised learning tasks.
+        - lat (ndarray): Values of causal variables
+
+    The method constructs these components based on the dataset's configuration and returns them
+    either as a tuple (if multiple components are requested) or as a single ndarray (if only images
+    are requested).
+    """
+    # Begin by extracting the image or images based on the dataset's configuration
         idx = self.indices[idx]
         returns = []
 

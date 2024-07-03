@@ -63,10 +63,11 @@ class ImageLogCallback(pl.Callback):
             
             trainer.model.train()
 
-
+# TODO: to change in the project
 class CorrelationMetricsLogCallback(pl.Callback):
     """ Callback for extracting correlation metrics (R^2 and Spearman) """
 
+# num_train_epochs is the epochs to train MLP.
     def __init__(self, dataset, every_n_epochs=10, num_train_epochs=100, cluster=False, test_dataset=None):
         super().__init__()
         assert dataset is not None, "Dataset for correlation metrics cannot be None."
@@ -131,7 +132,10 @@ class CorrelationMetricsLogCallback(pl.Callback):
         loader = data.DataLoader(self.dataset, batch_size=256, drop_last=False, shuffle=False)
         all_encs, all_latents = [], []
         for batch in loader:
+            # What are the entries in the batch?
             inps, *_, latents = batch
+            # There is no encode function in AE?
+            # The output of NF encode is the causals of the BISCUIT
             encs = pl_module.encode(inps.to(pl_module.device)).cpu()
             all_encs.append(encs)
             all_latents.append(latents)
@@ -141,6 +145,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
         all_encs = (all_encs - all_encs.mean(dim=0, keepdim=True)) / all_encs.std(dim=0, keepdim=True).clamp(min=1e-2)
         # Create new tensor dataset for training (50%) and testing (50%)
         full_dataset = data.TensorDataset(all_encs, all_latents)
+        # TODO P: Half for training first step
         train_size = int(0.5 * all_encs.shape[0])
         test_size = all_encs.shape[0] - train_size
         train_dataset, test_dataset = data.random_split(full_dataset, 
@@ -150,6 +155,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
         if hasattr(pl_module, 'target_assignment') and pl_module.target_assignment is not None:
             target_assignment = pl_module.target_assignment.clone()
         else:
+            # For the step 1, the ta is the unit matrix so the masked input stays unchanged.
             target_assignment = torch.eye(all_encs.shape[-1])
         encoder = self.train_network(pl_module, train_dataset, target_assignment)
         encoder.eval()
@@ -161,6 +167,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
             pred_dict[key] = pred_dict[key].cpu()
         _, dists, norm_dists = encoder.calculate_loss_distance(pred_dict, test_exp_labels)
         # Calculate statistics (R^2, pearson, etc.)
+        # Why use test_label instead of test_exp_labels?
         avg_norm_dists, r2_matrix = self.log_R2_statistic(trainer, encoder, pred_dict, test_labels, norm_dists, pl_module=pl_module)
         self.log_Spearman_statistics(trainer, encoder, pred_dict, test_labels, pl_module=pl_module)
         if is_training:
@@ -178,6 +185,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
         # We use one, sufficiently large network that predicts for any input all causal variables
         # To iterate over the different sets, we use a mask which is an extra input to the model
         # This is more efficient than using N networks and showed same results with large hidden size
+        # Use CausalEncoder instead of MLP cause the input could ebe continuous, categorical or angle.
         encoder = CausalEncoder(c_hid=128,
                                 lr=4e-3,
                                 causal_var_info=causal_var_info,
@@ -200,6 +208,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
             for inps, latents in train_loader:
                 inps = inps.to(device)
                 latents = latents.to(device)
+                # Add mask to the input
                 inps, latents = self._prepare_input(inps, target_assignment, latents)
                 loss = encoder._get_loss([inps, latents], mode=None)
                 optimizer.zero_grad()
@@ -208,8 +217,11 @@ class CorrelationMetricsLogCallback(pl.Callback):
                 avg_loss += loss.item()
         return encoder
 
+    #P: what latents for training step 2
+    # Mask input to use the same network
     def _prepare_input(self, inps, target_assignment, latents, flatten_inp=True):
         ta = target_assignment.detach()[None,:,:].expand(inps.shape[0], -1, -1)
+        # concatenate the masked input with the mask.
         inps = torch.cat([inps[:,:,None] * ta, ta], dim=-2).permute(0, 2, 1)
         latents = latents[:,None].expand(-1, inps.shape[1], -1)
         if flatten_inp:
@@ -221,6 +233,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
         avg_pred_dict = OrderedDict()
         for i, var_key in enumerate(encoder.hparams.causal_var_info):
             var_info = encoder.hparams.causal_var_info[var_key]
+            # Why calculate the distance between ground truth and the normalized ground truth?
             gt_vals = test_labels[...,i]
             if var_info.startswith('continuous'):
                 avg_pred_dict[var_key] = gt_vals.mean(dim=0, keepdim=True).expand(gt_vals.shape[0],)
@@ -381,7 +394,7 @@ class CorrelationMetricsLogCallback(pl.Callback):
                 pl_module.log(f'corr_callback_{tag}_diag{self.log_postfix}', avg_diag)
                 pl_module.log(f'corr_callback_{tag}_max_off_diag{self.log_postfix}', max_off_diag)
 
-
+#TODO 
 class PermutationCorrelationMetricsLogCallback(CorrelationMetricsLogCallback):
     """ 
     Adapting the correlation metrics callback by first running 
@@ -394,6 +407,7 @@ class PermutationCorrelationMetricsLogCallback(CorrelationMetricsLogCallback):
         if self.test_dataset is None:
             self.test_dataset = self.val_dataset
 
+    # At first, map all latents to causals. Group the latents.
     @torch.no_grad()
     def on_validation_epoch_start(self, trainer, pl_module, is_test=False):
         self.log_postfix = '_all_latents' + ('_test' if is_test else '')
@@ -406,15 +420,18 @@ class PermutationCorrelationMetricsLogCallback(CorrelationMetricsLogCallback):
         max_r2 = r2_matrix.argmax(dim=-1)
         ta = F.one_hot(max_r2, num_classes=r2_matrix.shape[-1]).float()
         # Group multi-dimensional causal variables together
+        #Why the correponding relationship is continuous?
         if isinstance(self.dataset, iTHORDataset):
             ta = torch.cat([ta[:,:1],
-                            ta[:,1:7].sum(dim=-1, keepdims=True),
+                            ta[:,1:7].sum(dim=-1, keepdims=True), # Combine the latents into the causals
                             ta[:,7:9],
                             ta[:,9:13].sum(dim=-1, keepdims=True),
                             ta[:,13:]], dim=-1)
         elif isinstance(self.dataset, CausalWorldDataset):
             ta = torch.cat([ta[:,:6],
                             ta[:,6:].sum(dim=-1, keepdims=True)], dim=-1)
+        # Voronoi is fully entangled
+        # Why?
         if trainer.current_epoch == 0:
             ta[:,0] = 1
             ta[:,1:] = 0
@@ -422,6 +439,8 @@ class PermutationCorrelationMetricsLogCallback(CorrelationMetricsLogCallback):
         pl_module.last_target_assignment.data = ta
 
     @torch.no_grad()
+    # The second stage for mapping latents to causals
+    # 
     def on_validation_epoch_end(self, trainer, pl_module, is_test=False):
         self.log_postfix = '_grouped_latents' + ('_test' if is_test else '')
         self.test_model(trainer, pl_module)

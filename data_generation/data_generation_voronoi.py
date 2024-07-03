@@ -917,7 +917,9 @@ def generate_full_dataset(dataset_size, folder, split_name=None, num_processes=8
 
     if split_name is not None:
         images = np.load(os.path.join(folder, 'images.npz'))
+        
         latents = np.load(os.path.join(folder, 'latents.npz'))
+        print(f"latents size: {latents.files}")
         if triplets:
             elem_dict = dict()
             elem_dict['latents'] = latents['triplet_latents']
@@ -927,6 +929,7 @@ def generate_full_dataset(dataset_size, folder, split_name=None, num_processes=8
         else:
             elem_dict = {key: latents[key] for key in latents.keys()}
             elem_dict['images'] = images['imgs']
+            print(f"images size: {images['imgs'].shape}")
         if split_name == 'train':
             exmp_imgs = elem_dict['images'][:16]
             exmp_imgs = np.reshape(exmp_imgs, (4, 4, *exmp_imgs.shape[1:]))

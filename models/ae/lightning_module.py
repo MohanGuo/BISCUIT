@@ -51,6 +51,7 @@ class Autoencoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
+        #Build encoder and decoder from self-defined NN. If images are small, use simple ones.
         if self.hparams.img_width == 32:
             EncoderClass = SimpleEncoder
             DecoderClass = SimpleDecoder

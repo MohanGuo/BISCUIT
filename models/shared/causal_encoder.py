@@ -101,6 +101,7 @@ class CausalEncoder(pl.LightningModule):
     def forward(self, x):
         z = self.encoder(x)
         v = OrderedDict()
+        # for all causals in the model, predict the possibility of being it.
         for var_key in self.hparams.causal_var_info:
             v[var_key] = self.pred_layers[var_key](z)
         return v
@@ -113,6 +114,7 @@ class CausalEncoder(pl.LightningModule):
             pred = self.pred_layers[var_key](z)
             if var_info.startswith('continuous'):
                 pass  # Nothing special to do
+            # Turn coordinates into angle.
             elif var_info.startswith('angle'):
                 pred = torch.atan2(pred[...,0], pred[...,1])[...,None]
                 pred = torch.where(pred < 0, pred + 2*np.pi, pred)
@@ -131,13 +133,16 @@ class CausalEncoder(pl.LightningModule):
                                              max_iters=self.hparams.max_iters)
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'step'}]
 
+# gt_vec is the ground truth of causal variable. How to get it?
     def calculate_loss_distance(self, pred_dict, gt_vec, keep_sign=False):
         # Function for calculating the loss and distance between predictions (pred_dict) and
         # ground truth (gt_vec) for every causal variable in the dictionary.
+        
         losses = OrderedDict()
         dists = OrderedDict()
         norm_dists = OrderedDict()
         for i, var_key in enumerate(pred_dict):
+            # print(f"Shape of pred_dict and gt_vec: {pred_dict[var_key].shape}")
             var_info = self.hparams.causal_var_info[var_key]
             gt_val = gt_vec[...,i]
             if var_info.startswith('continuous'):
@@ -148,6 +153,9 @@ class CausalEncoder(pl.LightningModule):
                 if not keep_sign:
                     dists[var_key] = dists[var_key].abs()
                 norm_dists[var_key] = dists[var_key] / float(var_info.split('_')[-1])
+                # print(f"Value of prediction in calculate_loss_distance: {pred_dict[var_key].squeeze(dim=-1)}")
+                # print(f"Value of ground truth in calculate_loss_distance: {gt_val}")
+                # print(f"Shape of losses in calculate_loss_distance: {losses[var_key].shape}")
             elif var_info.startswith('angle'):
                 # Cosine similarity loss
                 vec = torch.stack([torch.sin(gt_val), torch.cos(gt_val)], dim=-1)

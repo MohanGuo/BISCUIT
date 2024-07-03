@@ -38,12 +38,14 @@ class AutoregNormalizingFlow(nn.Module):
                                                  init_std_factor=(0 if zero_init else init_std_factor),
                                                  transform_layer=transform_layer))
 
+    #Simple to Complex
     def forward(self, x):
         ldj = x.new_zeros(x.shape[0],)
         for flow in self.flows:
             x, ldj = flow(x, ldj)
         return x, ldj
 
+    #Complex to simple
     def reverse(self, x):
         for flow in reversed(self.flows):
             x = flow.reverse(x)

@@ -22,7 +22,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--offline', action='store_true')
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--num_workers', type=int, default=4) # What is it?
     parser.add_argument('--c_hid', type=int, default=64)
     parser.add_argument('--num_latents', type=int, default=32)
     parser.add_argument('--lr', type=float, default=5e-4)
